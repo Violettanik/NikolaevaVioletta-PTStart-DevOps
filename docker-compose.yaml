@@ -1,0 +1,81 @@
+version: '3.9'
+
+services:
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    image: bot_image:latest
+    container_name: bot
+    environment:
+      - TOKEN=${TOKEN}
+      - RM_HOST=${RM_HOST}
+      - RM_PORT=${RM_PORT}
+      - RM_USER=${RM_USER}
+      - RM_PASSWORD=${RM_PASSWORD}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_REPL_USER=${DB_REPL_USER}
+      - DB_REPL_PASSWORD=${DB_REPL_PASSWORD}
+      - DB_REPL_HOST=${DB_REPL_HOST}
+      - DB_REPL_PORT=${DB_REPL_PORT}
+    depends_on:
+      - db
+    env_file:
+      - .env
+  db:
+    build:
+      context: ./db
+      dockerfile: Dockerfile
+    image: db_image:latest
+    container_name: db
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_DATABASE}
+      - DB_REPL_USER=${DB_REPL_USER}
+      - DB_REPL_PASSWORD=${DB_REPL_PASSWORD}
+    command: |
+      -c wal_level=replica
+      -c hot_standby=on
+      -c max_wal_senders=10
+      -c max_replication_slots=10
+      -c hot_standby_feedback=on
+      -c log_replication_commands=on
+    ports:
+      - ${DB_PORT}:5432
+    env_file:
+      - .env
+  db_repl:
+    build:
+      context: ./db_repl
+      dockerfile: Dockerfile
+    image: db_repl_image
+    container_name: db_repl
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - DB_REPL_PASSWORD=${DB_REPL_PASSWORD}
+      - DB_REPL_USER=${DB_REPL_USER}
+    command: |
+      bash -c "
+      rm -rf /var/lib/postgresql/data/*
+      until PGPASSWORD=${DB_REPL_PASSWORD} pg_basebackup --pgdata=/var/lib/postgresql/data -R --slot=replication_slot --host=${DB_HOST} --username=${DB_REPL_USER}
+      do
+      echo 'Waiting for primary to connect...'
+      sleep 1s
+      done
+      echo 'Backup done, starting replica...'
+      chown -R postgres:postgres /var/lib/postgresql/data
+      chmod 700 /var/lib/postgresql/data
+      su - postgres -c '/usr/lib/postgresql/16/bin/postgres -D /var/lib/postgresql/data'
+      "
+    depends_on:
+      - db
+    ports:
+      - ${DB_REPL_PORT}:5432
+    env_file:
+      - .env
