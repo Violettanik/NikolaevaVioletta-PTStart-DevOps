@@ -54,11 +54,11 @@ def getReplLogsCommand(update: Update, context):
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(hostname=os.getenv('RM_HOST'), username=os.getenv('RM_USER'), password=os.getenv('RM_PASSWORD'), port=os.getenv('RM_PORT'))
     result = ''
-    stdin, stdout, stderr = ssh.exec_command('cat /tmp/pg.log | grep "replication"')
+    stdin, stdout, stderr = ssh.exec_command('cat /tmp/pg.log | grep repl')
     result = stdout.read() + stderr.read() 
     result = result.decode()
-    if result == '' or 'cat: /tmp/pg.log: No such file or directory' in result:
-        stdin, stdout, stderr = ssh.exec_command('docker logs db 2>&1 | grep "replication"')
+    if result == '' or 'cat: /tmp/pg.log: No such file or directory' in result or (len(result)<130):
+        stdin, stdout, stderr = ssh.exec_command('docker logs db 2>&1 | grep repl')
         result = stdout.read() + stderr.read()
         result = result.decode()
     ssh.close()
@@ -379,18 +379,35 @@ def getAptListCommand(update: Update, context):
 
 def getAptList (update: Update, context):
     user_input = update.message.text
-
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(hostname=os.getenv('RM_HOST'), username=os.getenv('RM_USER'), password=os.getenv('RM_PASSWORD'), port=os.getenv('RM_PORT'))
     if (user_input == "all"):
-        stdin, stdout, stderr = ssh.exec_command('apt list')
+        stdin, stdout, stderr = ssh.exec_command('apt list --installed')
     else:
-        stdin, stdout, stderr = ssh.exec_command('apt list|grep ' + user_input)
+        stdin, stdout, stderr = ssh.exec_command('apt list --installed | grep ' + user_input)
+        result = stdout.read().decode()
+        if not (user_input in result):
+            update.message.reply_text("Данного пакета нет в установленных, но вы можете прочесть описание пакета.")
+            stdin, stdout, stderr = ssh.exec_command('apt show ' + user_input)
+            result = stdout.read().decode()
+            if not (user_input in result):
+                update.message.reply_text("Такого пакета не существует")
+            else:
+                update.message.reply_text(result)
+        else:
+            update.message.reply_text("Данный пакет есть в установленных, вы можете прочесть описание пакета.")
+            update.message.reply_text(result)
+            stdin, stdout, stderr = ssh.exec_command('apt show ' + user_input)
+            result = stdout.read().decode()
+            if not (user_input in result):
+                update.message.reply_text("Такого пакета не существует")
+            else:
+                update.message.reply_text(result)
     result = stdout.read().decode()
     ssh.close
-    if (len(result) > 4096 * 25):
-        for i in range(0, 4096 * 25, 4096):
+    if (len(result) > 4096 * 30):
+        for i in range(0, 4096 * 30, 4096):
             update.message.reply_text(result[i:i + 4096])
         update.message.reply_text("и другие")
     else:
