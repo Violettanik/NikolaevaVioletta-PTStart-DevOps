@@ -59,16 +59,14 @@ def getReplLogs(update: Update, context):
     user_input = update.message.text # Получаем пароль
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(hostname=os.getenv('RM_HOST'), username=os.getenv('RM_USER'), password=os.getenv('RM_PASSWORD'), port=os.getenv('RM_PORT'))
     if user_input == "1":
-        ssh.connect(hostname=os.getenv('RM_HOST'), username=os.getenv('RM_USER'), password=os.getenv('RM_PASSWORD'), port=os.getenv('RM_PORT'))
         stdin, stdout, stderr = ssh.exec_command('docker logs db 2>&1 | grep repl')
-        result = stdout.read() + stderr.read()
-        result = result.decode()
     elif user_input == "2":
-        ssh.connect(hostname=os.getenv('DB_HOST'), username=os.getenv('DB_USER'), password=os.getenv('DB_PASSWORD'), port=os.getenv('RM_PORT'))
+        update.message.reply_text('Для получения логов о репликации при запуске ansible необходимо, чтобы база данных была запущена на машине с ip-адресом RM_HOST (на которой есть пользователь RM_USER с паролем RM_PASSWORD)')
         stdin, stdout, stderr = ssh.exec_command('cat /tmp/pg.log | grep repl')
-        result = stdout.read() + stderr.read() 
-        result = result.decode()
+    result = stdout.read() + stderr.read() 
+    result = result.decode()
     ssh.close()
     for i in range(0, len(result), 4096):
         update.message.reply_text(result[i:i + 4096])
