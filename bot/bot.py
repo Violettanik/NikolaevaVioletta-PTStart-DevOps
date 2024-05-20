@@ -70,6 +70,7 @@ def getReplLogs(update: Update, context):
     ssh.close()
     for i in range(0, len(result), 4096):
         update.message.reply_text(result[i:i + 4096])
+    return ConversationHandler.END
 
 
 def getEmailsCommand(update: Update, context):
