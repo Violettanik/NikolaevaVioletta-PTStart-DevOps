@@ -50,20 +50,30 @@ def helpCommand(update: Update, context):
 
 def getReplLogsCommand(update: Update, context):
     update.message.reply_text('Для получения информации необходимо подключаться к пользователю с правами root (но не к самому root). В противном случае информация будет недоступна.')
+    update.message.reply_text('Для получения логов о репликации при запуске docker и ansible используются разные функции. Введите 1, если вы заупстили docker, введите 2, если вы запустили ansible:')
+
+    return 'get_repl_logs'
+
+
+def getReplLogs(update: Update, context):
+    user_input = update.message.text # Получаем пароль
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(hostname=os.getenv('RM_HOST'), username=os.getenv('RM_USER'), password=os.getenv('RM_PASSWORD'), port=os.getenv('RM_PORT'))
-    result = ''
-    stdin, stdout, stderr = ssh.exec_command('cat /tmp/pg.log | grep repl')
-    result = stdout.read() + stderr.read() 
-    result = result.decode()
-    if result == '' or 'cat: /tmp/pg.log: No such file or directory' in result or (len(result)<130):
+    if user_input == "1":
+        ssh.connect(hostname=os.getenv('RM_HOST'), username=os.getenv('RM_USER'), password=os.getenv('RM_PASSWORD'), port=os.getenv('RM_PORT'))
         stdin, stdout, stderr = ssh.exec_command('docker logs db 2>&1 | grep repl')
         result = stdout.read() + stderr.read()
+        result = result.decode()
+    elif user_input == "2":
+        ssh.connect(hostname=os.getenv('DB_HOST'), username=os.getenv('DB_USER'), password=os.getenv('DB_PASSWORD'), port=os.getenv('RM_PORT'))
+        stdin, stdout, stderr = ssh.exec_command('cat /tmp/pg.log | grep repl')
+        result = stdout.read() + stderr.read() 
         result = result.decode()
     ssh.close()
     for i in range(0, len(result), 4096):
         update.message.reply_text(result[i:i + 4096])
+
+
 def getEmailsCommand(update: Update, context):
     try:
         connection = psycopg2.connect(user=os.getenv('DB_USER'),
@@ -433,6 +443,14 @@ def main():
     # Получаем диспетчер для регистрации обработчиков
     dp = updater.dispatcher
 
+    convGetReplLogs = ConversationHandler(
+        entry_points=[CommandHandler('get_repl_logs', getReplLogsCommand)],
+        states={
+            'get_repl_logs': [MessageHandler(Filters.text & ~Filters.command, getReplLogs)],
+        },
+        fallbacks=[]
+    )
+
     convHandlerFindEmails = ConversationHandler(
         entry_points=[CommandHandler('find_email', findEmailsCommand)],
         states={
@@ -467,7 +485,7 @@ def main():
 # Регистрируем обработчики команд
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("help", helpCommand))
-    dp.add_handler(CommandHandler("get_repl_logs", getReplLogsCommand))
+    dp.add_handler(convGetReplLogs)
     dp.add_handler(CommandHandler("get_emails", getEmailsCommand))
     dp.add_handler(CommandHandler("get_phone_numbers", getPhoneNumbersCommand))
     dp.add_handler(convHandlerFindEmails)
